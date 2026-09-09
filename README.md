@@ -1,4 +1,4 @@
-# Procurement System
+# BuyDesk
 
 A Java backend for deciding which suppliers should supply required parts, in what quantities, and at what cost before a deadline. The planner considers lead times, minimum order quantities, capacity, and all-units bulk discounts, and explains its allocations and shortages.
 
@@ -9,7 +9,7 @@ The repository also contains supplier CRUD, manual purchase orders, JWT authenti
 The purchasing decision engine is implemented in **order-service**. It takes a weekly demand list and a supplier-offer snapshot, then returns an exact minimum-cost on-time allocation under explicit assumptions. Unlike the existing manual order API, the caller does **not** choose the winning supplier or allocated quantities.
 
 - Endpoint: **POST /api/orders/purchase-plans**, through gateway port 8080 or directly on order-service port 8082.
-- Authentication: use an **asit** bearer token (write scope). Viewer cannot POST a plan.
+- Authentication: use an **abinash** bearer token (write scope). Viewer cannot POST a plan.
 - Demo input: [examples/purchase-plan.json](examples/purchase-plan.json).
 - Algorithm and assumptions: [docs/PURCHASING-PLANNER.md](docs/PURCHASING-PLANNER.md).
 - Output: per-part supplier allocations, prices, costs, arrival dates, rejected/unused suppliers, explanations, and shortages.
@@ -81,8 +81,8 @@ The gateway and both business services validate tokens. Order-service forwards t
 Clone the repository and import each service into Eclipse using **File → Import → Maven → Existing Maven Projects**. Each service has its own POM and Maven Wrapper; there is no root aggregator POM.
 
 ```text
-git clone https://github.com/Asit527/procurement-system.git
-cd procurement-system
+git clone https://github.com/abinash45/buydesk.git
+cd buydesk
 ```
 
 Requirements: JDK 17 or 21, MySQL running on localhost:3306, OpenSSL, and access to GitHub for Config Server.
@@ -107,8 +107,8 @@ In **Eclipse → Run → Run Configurations → Spring Boot App → select servi
 | --- | --- | --- |
 | supplier-service | DB_PASSWORD | Your MySQL password |
 | order-service | DB_PASSWORD | Your MySQL password |
-| auth-service | AUTH_PASSWORD | Your chosen asit account password |
-| auth-service | VIEWER_PASSWORD | A different password for viewer |
+| auth-service | AUTH_PASSWORD | admin123 for the abinash account |
+| auth-service | VIEWER_PASSWORD | password configured for the viewer |
 
 Click **Apply** and restart affected services after changing environment variables. Use strong ASCII passwords within the login input's 64-character limit. Do not put actual passwords, tokens, or private keys into Git. Spring does not automatically load a `.env` file in this setup.
 
@@ -117,10 +117,10 @@ Click **Apply** and restart affected services after changing environment variabl
 On macOS/Linux, run these commands **once on a new machine**. Do not overwrite existing keys when restarting the application.
 
 ```text
-mkdir -p ~/.procurement/keys
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out ~/.procurement/keys/auth-private.pem
-chmod 600 ~/.procurement/keys/auth-private.pem
-openssl pkey -in ~/.procurement/keys/auth-private.pem -pubout -out ~/.procurement/keys/auth-public.pem
+mkdir -p ~/.buydesk/keys
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out ~/.buydesk/keys/auth-private.pem
+chmod 600 ~/.buydesk/keys/auth-private.pem
+openssl pkey -in ~/.buydesk/keys/auth-private.pem -pubout -out ~/.buydesk/keys/auth-public.pem
 ```
 
 Auth-service reads these files from the Java process's user home. The private key signs tokens; only the public key is published at `http://localhost:8083/.well-known/jwks.json`. Keys remain outside this repository. Keeping the same key pair allows unexpired tokens to work across auth-service restarts.
@@ -161,21 +161,21 @@ http://localhost:8080/api/auth/login
 
 ```json
 {
-  "username": "asit",
-  "password": "REPLACE_WITH_YOUR_AUTH_PASSWORD"
+  "username": "abinash",
+  "password": "admin123"
 }
 ```
 
-Replace the password placeholder locally. For viewer, use username `viewer` and the configured VIEWER_PASSWORD.
+Replace the configured password locally. For the current setup, use username `abinash` and password `admin123`.
 
-A successful response contains `accessToken`, `tokenType` (`Bearer`), and `expiresIn` (`900` seconds). Copy only the token value into Postman's **Authorization → Bearer Token** field. Do not include quotes or an extra Bearer prefix.
+A successful response contains `accessToken`, `tokenType` (`Bearer`), and `expiresIn` (`900` seconds). Copy only the token value into Postman's **Authorization → Bearer Token** field. Do not include quotes or an extra `Bearer` prefix.
 
 | Account | Scope | Allowed operations |
 | --- | --- | --- |
-| asit | procurement.read procurement.write | Read and write supplier/order APIs |
-| viewer | procurement.read | Read supplier/order APIs |
+| abinash | buydesk.read buydesk.write | Read and write supplier/order APIs |
+| viewer | buydesk.read | Read supplier/order APIs |
 
-Tokens use RS256, issuer `http://localhost:8083`, and audience `procurement-api`. Signature, issuer, audience, and expiration are validated. There is no refresh-token endpoint; log in again after expiry. These permissions are scopes, not separate ROLE_ADMIN authorities.
+Tokens use RS256, issuer `http://localhost:8083`, and audience `buydesk-api`. Signature, issuer, audience, and expiration are validated. There is no refresh-token endpoint; log in again after expiry. These permissions are scopes, not separate `ROLE_ADMIN` authorities.
 
 ## API reference
 
@@ -197,7 +197,7 @@ Use gateway base URL `http://localhost:8080`. Supplier/order endpoints require a
 
 Replace `{id}` with an actual numeric ID; do not paste placeholders literally into Postman URLs.
 
-Supplier POST/PUT body:
+### Supplier POST/PUT body
 
 ```json
 {
@@ -229,18 +229,18 @@ The planner was also exercised through the gateway with a bearer token and retur
 
 ## Demonstration checklist
 
-The original CRUD/security scenarios below were exercised manually during development. The purchasing planner additionally has the focused automated suite described above.
+The following CRUD, security, authentication, and configuration scenarios were exercised during development. The purchasing planner additionally has the focused automated test suite described above.
 
-1. Log in as asit; create a supplier, then an order using its ID.
-2. Read suppliers and orders through the gateway.
-3. Cancel an order and GET it again to verify CANCELLED.
-4. Submit blank supplier fields and reuse another supplier's code to check validation/conflict responses.
-5. Request a business endpoint without a token or with `invalid-token`: expect 401.
-6. Verify direct business ports 8081 and 8082 also reject missing tokens.
-7. Log in as viewer: GET should return 200; order POST should return 403.
-8. Repeat order POST as asit: expect 201.
-9. Obtain a token, restart auth-service, and reuse it before its 15-minute expiry.
-10. Check Config Server responses at `/supplier-service/default` and `/order-service/default` on port 8888; propertySources should be non-empty.
+1. Log in as abinash ; create a supplier, then create an order using the supplier ID returned by the supplier API.
+2. Read suppliers and orders through the API Gateway.
+3. Cancel an order and GET it again to verify that its status is CANCELLED.
+4. Submit blank supplier fields and reuse an existing supplier code to verify validation and conflict responses.
+5. Request a business endpoint without a token or with an invalid token; expect 401 Unauthorized.
+6. Verify that the direct supplier-service (8081) and order-service (8082) business endpoints also reject requests without a valid token.
+7. Log in as viewer; GET supplier/order endpoints should return 200, while order creation should return 403 Forbidden.
+8. Repeat order creation as abinash ; expect 201 Created.
+9. Obtain a JWT, restart auth-service, and reuse the token before its 15-minute expiry to verify that the token remains valid.
+10. Check Config Server responses at /supplier-service/default and /order-service/default on port 8888; propertySources should be non-empty.
 
 ### Circuit-breaker test
 
@@ -254,24 +254,24 @@ To observe state changes, temporarily set `logging.level.io.github.resilience4j.
 
 | Symptom | Check |
 | --- | --- |
-| AUTH_PASSWORD, VIEWER_PASSWORD, or DB_PASSWORD unresolved | Set the variable on the correct Eclipse run configuration and restart |
-| Cannot load signing key | Ensure both PEM files exist under the Java user's `.procurement/keys` directory |
-| Config Server startup/import error | Start port 8888 first; check GitHub access, branch, and config-repo files |
-| Eureka connection refused | Start discovery-server on 8761 |
+| DB_PASSWORD unresolved | Set the database password on the correct Eclipse run configuration and restart |
+| Cannot load signing key | Ensure both PEM files exist under the Java user's `.buydesk/keys` directory |
+| Config Server startup/import error | Start `config-server` on port 8888 first; check GitHub access, branch, and config-repo files |
+| Eureka connection refused | Start `discovery-server` on port 8761 |
 | 401 with a token | Get a fresh token; paste only its value; verify issuer, audience, and public-key endpoint |
-| Viewer gets 403 on POST | Expected: viewer only has read permission |
-| Login fails | Use POST, No Auth, and a JSON body with the configured account password |
-| Feign supplier verification returns 503 | Check supplier registration, token forwarding, downstream logs, and circuit state |
-| Java import cannot be resolved | Put starter dependencies in the main dependencies block and update Maven |
+| Viewer gets 403 on POST | Expected: `viewer` only has `buydesk.read` permission |
+| Login fails | Use POST, select **No Auth**, and send a JSON body with the configured `abinash` account credentials |
+| Feign supplier verification returns 503 | Check supplier registration, token forwarding, downstream logs, and circuit-breaker state |
+| Java import cannot be resolved | Put the required starter dependencies in the main dependencies block and update Maven |
 | Package mismatch | Match the Java package declaration to its source directory |
 
 ## Assumptions and deliberately omitted scope
 
 The planner maximizes on-time supplied quantity first, then minimizes purchase cost. Quantities are integers; split allocations are allowed and overbuying is not. Discounts apply to the entire supplier lot. Capacity is independent per supplier/part snapshot, with no shared global capacity or reservation. Lead times use calendar days. See [the planner documentation](docs/PURCHASING-PLANNER.md) for input limits, complexity, tie handling, and the complete assumptions.
 
-- **Frontend:** omitted because the assignment is a backend; requests can be demonstrated in Postman.
-- **Docker:** omitted for this submission; use the manual setup above.
-- **Persisted offers, plans, and automatic order placement:** omitted to keep the purchasing decision explicit and reproducible from a submitted snapshot. A plan does not create manual order records.
+- **Frontend:** omitted; the application is backend-focused and the APIs can be demonstrated using Postman.
+- **Docker:** omitted from the current setup; services are started manually using the configuration described above.
+- **Persisted offers, plans, and automatic order placement:** omitted to keep the purchasing decision explicit and reproducible from a submitted snapshot. A generated plan does not automatically create an order record.
 
 ## Current limits
 
