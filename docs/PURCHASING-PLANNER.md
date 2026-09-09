@@ -1,10 +1,10 @@
-# Purchasing planner — assignment decisions
+# Purchasing planner — decision logic
 
 ## Problem and objective
 
 For each requested part, choose integer quantities from supplier offers. A selected lot must meet the supplier's minimum quantity, must not exceed available capacity, and must arrive by the demand deadline. The applicable bulk tier sets the unit price for the entire lot.
 
-The objective is lexicographic: **maximize on-time quantity supplied without exceeding demand, then minimize total purchase cost**. If full demand is feasible, this gives the exact minimum-cost plan. Otherwise, return the best partial plan and an explicit shortage. A shortage is a valid 200 response with status SHORTAGE, not a silently successful full plan.
+The objective is lexicographic: **maximize on-time quantity supplied without exceeding demand, then minimize total purchase cost**. If full demand is feasible, this gives the exact minimum-cost plan. Otherwise, return the best partial plan and an explicit shortage. A shortage is a valid 200 response with status `SHORTAGE`, not a silently successful full plan.
 
 ## API contract
 
@@ -21,7 +21,7 @@ Response fields:
 
 | Field | Meaning |
 | --- | --- |
-| status | FULFILLED only if every part is fully supplied; otherwise SHORTAGE |
+| status | `FULFILLED` only if every part is fully supplied; otherwise `SHORTAGE` |
 | totalCost | Sum of selected lots across all parts |
 | parts[].supplied / shortage | Feasible allocation and uncovered demand |
 | allocations | Supplier code, chosen quantity, unit price, cost, arrival date, selection reason |
@@ -54,7 +54,7 @@ Time per part is O(S × Q²); storage is O(S × Q) for backtracking plus O(Q) co
 6. Discounts are all-units, not incremental tiers, and apply per supplier/part lot.
 7. Prices use a common currency and at most two nonzero decimal places. Freight, tax, inventory cost, budgets, quality scores, and supplier preferences are excluded.
 8. Available capacities are supplied as a snapshot. Planning does not consume them across concurrent requests.
-9. Purchasing decisions are proposals for review, not automatic procurement commitments.
+9. Purchasing decisions are proposals for review and do not automatically create order records.
 
 ## Validation and tests
 
@@ -62,10 +62,10 @@ Tests cover a non-greedy discount decision, split capacity, MOQ infeasibility, d
 
 ## Deliberate omissions and why
 
-- **Offer/demand database CRUD and saved plan history:** the request captures the full reproducible snapshot; omitted to prioritize the assignment's decision logic within the deadline.
+- **Offer/demand database CRUD and saved plan history:** the request captures the full reproducible snapshot; omitted to keep the planning engine focused on the decision logic.
 - **Capacity reservation and order conversion:** require transactional/concurrency rules and purchase-team approval; the existing manual order API remains separate.
 - **Shared capacities, multiple deadlines, shipping and budget constraints:** would couple parts or periods and need a more general optimization model.
 - **Unbounded quantities:** the exact DP is intentionally bounded; larger instances would justify MILP or another solver.
 - **Counterfactual reports for every possible alternative:** the API explains constraint rejections and the optimal objective, but does not enumerate all competing plans.
 
-The existing six-service infrastructure is supporting work. The assignment's main implementation is `PurchasePlanner.java`; it can be understood and tested independently of Eureka, MySQL, JWT issuance, or GitHub.
+The existing six-service infrastructure supports the application, while the main planning implementation is `PurchasePlanner.java`. The planning engine can be understood and tested independently of Eureka, MySQL, JWT issuance, or the other application services.
